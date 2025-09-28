@@ -2,9 +2,8 @@ name: SoGoodTea Weekly Promotion
 
 on:
   schedule:
-    # 每周一上午9点运行 (UTC时间)
     - cron: '0 9 * * 1'
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   trigger-dify:
@@ -52,19 +51,17 @@ jobs:
         image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
         echo "image_url=$image_url" >> $GITHUB_OUTPUT
         
-        # 提取英语内容 - 修复jq语法，用引号包围中文字符
+        # 提取英语内容 - 修复jq语法
         english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language."英语"."Facebook/Instagram"')
         echo "english_content=$english_content" >> $GITHUB_OUTPUT
 
     - name: Post to Facebook
       run: |
-        # 检查是否有有效内容
         if [ "${{ steps.parse.outputs.english_content }}" = "null" ] || [ "${{ steps.parse.outputs.english_content }}" = "" ]; then
           echo "No valid content to post to Facebook"
           exit 0
         fi
         
-        # 发布文字内容
         curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/feed" \
         -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
         -H "Content-Type: application/json" \
@@ -72,7 +69,6 @@ jobs:
           "message": "${{ steps.parse.outputs.english_content }}"
         }'
         
-        # 发布图片（如果有）
         if [ "${{ steps.parse.outputs.image_url }}" != "null" ] && [ "${{ steps.parse.outputs.image_url }}" != "" ]; then
           curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/photos" \
           -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
