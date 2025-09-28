@@ -12,9 +12,10 @@ jobs:
     
     steps:
     - name: Call Dify Workflow API
+      id: dify
       run: |
-        curl -X POST "https://api.dify.ai/v1/workflows/8e8aa058-7d7e-4f20-bfdb-8725c7e3edef/run" \
-        -H "Authorization: Bearer app-xT8zL9sJqw9bdASO5btWZJzi" \
+        response=$(curl -X POST "https://api.dify.ai/v1/workflows/8e8aa058-7d7e-4f20-bfdb-8725c7e3edef/run" \
+        -H "Authorization: Bearer ${{ secrets.DIFY_API_KEY }}" \
         -H "Content-Type: application/json" \
         -d '{
           "inputs": {
@@ -24,4 +25,48 @@ jobs:
           },
           "user": "fengzheng9@icloud.com",
           "response_mode": "blocking"
+        }')
+        
+        echo "Dify Response: $response"
+        echo "dify_response<<EOF" >> $GITHUB_OUTPUT
+        echo "$response" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Parse Dify Response
+      id: parse
+      run: |
+        # 提取内容结果
+        content_result=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result')
+        echo "content_result=$content_result" >> $GITHUB_OUTPUT
+        
+        # 提取图片URL
+        image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
+        echo "image_url=$image_url" >> $GITHUB_OUTPUT
+        
+        # 提取英语内容
+        english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language.英语."Facebook/Instagram"')
+        echo "english_content=$english_content" >> $GITHUB_OUTPUT
+
+    - name: Post to Facebook
+      run: |
+        # 发布文字内容
+        curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/feed" \
+        -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "message": "${{ steps.parse.outputs.english_content }}"
         }'
+        
+        # 发布图片（如果有）
+        if [ "${{ steps.parse.outputs.image_url }}" != "null" ] && [ "${{ steps.parse.outputs.image_url }}" != "" ]; then
+          curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/photos" \
+          -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
+          -F "url=${{ steps.parse.outputs.image_url }}" \
+          -F "message=${{ steps.parse.outputs.english_content }}"
+        fi
+
+    - name: Log Results
+      run: |
+        echo "Content posted to Facebook successfully!"
+        echo "English content: ${{ steps.parse.outputs.english_content }}"
+        echo "Image URL: ${{ steps.parse.outputs.image_url }}"
