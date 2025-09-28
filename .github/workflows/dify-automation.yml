@@ -13,7 +13,8 @@ jobs:
     - name: Call Dify Workflow API
       id: dify
       run: |
-        response=$(curl -X POST "https://api.dify.ai/v1/workflows/8e8aa058-7d7e-4f20-bfdb-8725c7e3edef/run" \
+        # 直接调用Dify API并检查响应
+        response=$(curl -s -X POST "https://api.dify.ai/v1/workflows/8e8aa058-7d7e-4f20-bfdb-8725c7e3edef/run" \
         -H "Authorization: Bearer ${{ secrets.DIFY_API_KEY }}" \
         -H "Content-Type: application/json" \
         -d '{
@@ -27,57 +28,79 @@ jobs:
         }')
         
         echo "Dify Response: $response"
-        echo "dify_response<<EOF" >> $GITHUB_OUTPUT
-        echo "$response" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-
-    - name: Parse Dify Response
-      id: parse
-      run: |
-        # 检查Dify API是否成功
-        if echo '${{ steps.dify.outputs.dify_response }}' | jq -e '.code' > /dev/null; then
-          echo "Dify API returned error: ${{ steps.dify.outputs.dify_response }}"
-          echo "content_result=null" >> $GITHUB_OUTPUT
-          echo "image_url=null" >> $GITHUB_OUTPUT
-          echo "english_content=null" >> $GITHUB_OUTPUT
+        
+        # 检查是否成功
+        if echo "$response" | grep -q '"code"'; then
+          echo "Dify API returned error: $response"
           exit 1
         fi
         
-        # 提取内容结果
-        content_result=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result')
-        echo "content_result=$content_result" >> $GITHUB_OUTPUT
+        # 保存响应到文件
+        echo "$response" > dify_response.json
+
+    - name: Extract Content
+      id: extract
+      run: |
+        # 使用Python解析JSON，避免jq语法问题
+        python3 << 'EOF'
+import json
+import sys
+
+try:
+    with open('dify_response.json', 'r') as f:
+        data = json.load(f)
+    
+    # 提取内容
+    content_result = data.get('data', {}).get('outputs', {}).get('content_result', '')
+    image_url = data.get('data', {}).get('outputs', {}).get('generated_images', [{}])[0].get('url', '')
+    
+    # 提取英语内容
+    if content_result and isinstance(content_result, dict):
+        english_content = content_result.get('content_by_language', {}).get('英语', {}).get('Facebook/Instagram', '')
+    else:
+        english_content = ''
+    
+    # 输出到GitHub Actions
+    with open('$GITHUB_OUTPUT', 'a') as f:
+        f.write(f'content_result={content_result}\n')
+        f.write(f'image_url={image_url}\n')
+        f.write(f'english_content={english_content}\n')
         
-        # 提取图片URL
-        image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
-        echo "image_url=$image_url" >> $GITHUB_OUTPUT
-        
-        # 提取英语内容 - 修复jq语法
-        english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language."英语"."Facebook/Instagram"')
-        echo "english_content=$english_content" >> $GITHUB_OUTPUT
+    print(f"Content extracted successfully")
+    print(f"English content: {english_content}")
+    print(f"Image URL: {image_url}")
+    
+except Exception as e:
+    print(f"Error parsing response: {e}")
+    sys.exit(1)
+EOF
 
     - name: Post to Facebook
       run: |
-        if [ "${{ steps.parse.outputs.english_content }}" = "null" ] || [ "${{ steps.parse.outputs.english_content }}" = "" ]; then
+        # 检查是否有有效内容
+        if [ -z "${{ steps.extract.outputs.english_content }}" ]; then
           echo "No valid content to post to Facebook"
           exit 0
         fi
         
+        # 发布文字内容
         curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/feed" \
         -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
         -H "Content-Type: application/json" \
         -d '{
-          "message": "${{ steps.parse.outputs.english_content }}"
+          "message": "${{ steps.extract.outputs.english_content }}"
         }'
         
-        if [ "${{ steps.parse.outputs.image_url }}" != "null" ] && [ "${{ steps.parse.outputs.image_url }}" != "" ]; then
+        # 发布图片（如果有）
+        if [ -n "${{ steps.extract.outputs.image_url }}" ]; then
           curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/photos" \
           -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
-          -F "url=${{ steps.parse.outputs.image_url }}" \
-          -F "message=${{ steps.parse.outputs.english_content }}"
+          -F "url=${{ steps.extract.outputs.image_url }}" \
+          -F "message=${{ steps.extract.outputs.english_content }}"
         fi
 
     - name: Log Results
       run: |
         echo "Content posted to Facebook successfully!"
-        echo "English content: ${{ steps.parse.outputs.english_content }}"
-        echo "Image URL: ${{ steps.parse.outputs.image_url }}"
+        echo "English content: ${{ steps.extract.outputs.english_content }}"
+        echo "Image URL: ${{ steps.extract.outputs.image_url }}"
