@@ -35,6 +35,15 @@ jobs:
     - name: Parse Dify Response
       id: parse
       run: |
+        # 检查Dify API是否成功
+        if echo '${{ steps.dify.outputs.dify_response }}' | jq -e '.code' > /dev/null; then
+          echo "Dify API returned error: ${{ steps.dify.outputs.dify_response }}"
+          echo "content_result=null" >> $GITHUB_OUTPUT
+          echo "image_url=null" >> $GITHUB_OUTPUT
+          echo "english_content=null" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+        
         # 提取内容结果
         content_result=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result')
         echo "content_result=$content_result" >> $GITHUB_OUTPUT
@@ -43,12 +52,18 @@ jobs:
         image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
         echo "image_url=$image_url" >> $GITHUB_OUTPUT
         
-        # 提取英语内容 - 修复jq语法
-        english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language.英语."Facebook/Instagram"')
+        # 提取英语内容 - 修复jq语法，用引号包围中文字符
+        english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language."英语"."Facebook/Instagram"')
         echo "english_content=$english_content" >> $GITHUB_OUTPUT
 
     - name: Post to Facebook
       run: |
+        # 检查是否有有效内容
+        if [ "${{ steps.parse.outputs.english_content }}" = "null" ] || [ "${{ steps.parse.outputs.english_content }}" = "" ]; then
+          echo "No valid content to post to Facebook"
+          exit 0
+        fi
+        
         # 发布文字内容
         curl -X POST "https://graph.facebook.com/v18.0/${{ secrets.FACEBOOK_PAGE_ID }}/feed" \
         -H "Authorization: Bearer ${{ secrets.FACEBOOK_ACCESS_TOKEN }}" \
