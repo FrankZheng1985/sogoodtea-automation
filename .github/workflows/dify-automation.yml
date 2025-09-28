@@ -43,7 +43,7 @@ jobs:
         image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
         echo "image_url=$image_url" >> $GITHUB_OUTPUT
         
-        # 提取英语内容
+        # 提取英语内容 - 修复jq语法
         english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language.英语."Facebook/Instagram"')
         echo "english_content=$english_content" >> $GITHUB_OUTPUT
 
