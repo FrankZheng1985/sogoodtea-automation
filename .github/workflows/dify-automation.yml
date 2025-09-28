@@ -33,20 +33,19 @@ jobs:
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Parse Dify Response
-  id: parse
-  run: |
-    # 提取内容结果
-    content_result=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result')
-    echo "content_result=$content_result" >> $GITHUB_OUTPUT
-    
-    # 提取图片URL
-    image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
-    echo "image_url=$image_url" >> $GITHUB_OUTPUT
-    
-    # 提取英语内容
+      id: parse
+      run: |
+        # 提取内容结果
+        content_result=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result')
+        echo "content_result=$content_result" >> $GITHUB_OUTPUT
+        
+        # 提取图片URL
+        image_url=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.generated_images[0].url')
+        echo "image_url=$image_url" >> $GITHUB_OUTPUT
+        
         # 提取英语内容
-    english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language.英语."Facebook/Instagram"')')
-    echo "english_content=$english_content" >> $GITHUB_OUTPUT
+        english_content=$(echo '${{ steps.dify.outputs.dify_response }}' | jq -r '.data.outputs.content_result' | jq -r '.content_by_language.英语."Facebook/Instagram"')
+        echo "english_content=$english_content" >> $GITHUB_OUTPUT
 
     - name: Post to Facebook
       run: |
