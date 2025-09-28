@@ -1,0 +1,27 @@
+name: SoGoodTea Weekly Promotion
+
+on:
+  schedule:
+    # 每周一上午9点运行 (UTC时间)
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  trigger-dify:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Call Dify Workflow API
+      run: |
+        curl -X POST "https://api.dify.ai/v1/workflows/8e8aa058-7d7e-4f20-bfdb-8725c7e3edef/run" \
+        -H "Authorization: Bearer app-xT8zL9sJqw9bdASO5btWZJzi" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "inputs": {
+            "week_number": 1,
+            "target_languages": "英语,德语,法语",
+            "platforms": "Facebook,Instagram,Twitter"
+          },
+          "user": "fengzheng9@icloud.com",
+          "response_mode": "blocking"
+        }'
